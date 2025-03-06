@@ -1,0 +1,114 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mgmtd-main
+data:
+  mgmtd_main.toml: |
+    [[common.log.categories]]
+    handlers = [ 'normal', 'err' ]
+
+    [[common.log.handlers]]
+    async = true
+    name = 'normal'
+    start_level = 'NONE'
+    writer_type = 'STREAM'
+
+    [[common.log.handlers]]
+    async = false
+    name = 'err'
+    start_level = 'ERR'
+    writer_type = 'STREAM'
+
+    [common.monitor]
+    collect_period = '60s'
+    num_collectors = 1
+
+    [[common.monitor.reporters]]
+    type = 'log'
+
+    [server.service]
+    allow_heartbeat_from_unregistered = true
+
+    [[server.base.groups]]
+    services = [ 'Mgmtd' ]
+    [server.base.groups.io_worker.ibsocket]
+    max_sge = 1
+
+    [[server.base.groups]]
+    services = [ 'Core' ]
+    [server.base.groups.io_worker.ibsocket]
+    max_sge = 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mgmtd
+spec:
+  podManagementPolicy: Parallel
+  serviceName: mgmtd
+  ordinals:
+    start: 1
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mgmtd
+  template:
+    metadata:
+      labels:
+        app: mgmtd
+    spec:
+      containers:
+      - name: mgmtd
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-mgmtd
+        # command: ["sleep", "10000"]
+        args:
+        - --cfg=/etc/mgmtd/mgmtd_main.toml
+        - --app_config.node_id=$(POD_INDEX)
+        - --launcher_config.allow_dev_version=true # FIXME
+        - --launcher_config.cluster_id=containerized # FIXME: set by operator
+        resources:
+          requests:
+            aliyun/erdma: "1"
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            aliyun/erdma: "1"
+            memory: "2Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: fdb-cluster-file
+          mountPath: /etc/foundationdb
+        - name: config
+          mountPath: /etc/mgmtd
+        securityContext:
+          privileged: true
+        env:
+        - name: POD_INDEX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        ports:
+        - containerPort: 8000
+          name: mgmtd
+        - containerPort: 9000
+          name: core
+      volumes:
+      - name: fdb-cluster-file
+        configMap:
+          name: fdb-meta-config
+          items:
+          - key: cluster-file
+            path: fdb.cluster
+      - name: config
+        configMap:
+          name: mgmtd-main
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mgmtd
+spec:
+  selector:
+    app: mgmtd
+  clusterIP: None

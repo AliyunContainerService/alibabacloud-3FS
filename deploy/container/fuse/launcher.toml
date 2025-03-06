@@ -1,0 +1,5 @@
+mountpoint = '/mnt/3fs'
+token_file = '/etc/token/token'
+
+[mgmtd_client]
+mgmtd_server_addresses = ['RDMA://mgmtd:8000']

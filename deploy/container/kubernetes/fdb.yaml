@@ -1,0 +1,68 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fdb-kubernetes
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fdb-kubernetes
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - "pods"
+    verbs:
+      - "get"
+      - "watch"
+      - "update"
+      - "patch"
+      - "list"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fdb-kubernetes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fdb-kubernetes
+subjects:
+  - kind: ServiceAccount
+    name: fdb-kubernetes
+---
+apiVersion: apps.foundationdb.org/v1beta2
+kind: FoundationDBCluster
+metadata:
+  name: fdb-meta
+spec:
+  processCounts:
+    cluster_controller: 1
+    stateless: -1
+  processes:
+    general:
+      podTemplate:
+        spec:
+          securityContext:
+            fsGroup: 4059
+            fsGroupChangePolicy: OnRootMismatch
+          serviceAccountName: fdb-kubernetes
+          containers:
+          - name: foundationdb
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+          - name: foundationdb-kubernetes-sidecar
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+      volumeClaimTemplate:
+        spec:
+          storageClassName: alibabacloud-disk-entry
+          resources:
+            requests:
+              storage: 16Gi
+  version: 7.1.61

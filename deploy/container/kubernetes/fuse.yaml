@@ -1,0 +1,85 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fuse-main
+data:
+  fuse_main.toml: |
+    [[common.log.categories]]
+    handlers = [ 'normal', 'err' ]
+
+    [[common.log.handlers]]
+    async = true
+    name = 'normal'
+    start_level = 'NONE'
+    writer_type = 'STREAM'
+
+    [[common.log.handlers]]
+    async = false
+    name = 'err'
+    start_level = 'ERR'
+    writer_type = 'STREAM'
+
+    [common.monitor]
+    collect_period = '60s'
+    num_collectors = 1
+
+    [[common.monitor.reporters]]
+    type = 'log'
+
+    [client.io_worker.ibsocket]
+    max_sge = 1
+
+    [storage.net_client.io_worker.ibsocket]
+    max_sge = 1
+
+    [storage.net_client_for_updates.io_worker.ibsocket]
+    max_sge = 1
+
+    [mgmtd]
+    mgmtd_server_addresses = ["RDMA://mgmtd:8000"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fuse
+  labels:
+    app: fuse
+spec:
+  containers:
+  - name: fuse
+    image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-fuse
+    args:
+    - --cfg=/etc/fuse/fuse_main.toml
+    - --launcher_config.cluster_id=containerized # FIXME: set by operator
+    - --launcher_config.client.io_worker.ibsocket.max_sge=1
+    resources:
+      requests:
+        aliyun/erdma: "1"
+        memory: 2Gi
+        cpu: "500m"
+      limits:
+        aliyun/erdma: "1"
+        memory: 4Gi
+        cpu: "2"
+    volumeMounts:
+    - name: config
+      mountPath: /etc/fuse
+    - name: token
+      mountPath: /etc/token
+    - name: mnt
+      mountPath: /mnt/3fs
+      mountPropagation: Bidirectional
+    securityContext:
+      privileged: true
+  volumes:
+  - name: config
+    configMap:
+      name: fuse-main
+  - name: token
+    secret:
+      secretName: root-token
+  - name: mnt
+    hostPath:
+      path: /mnt/3fs
+      type: DirectoryOrCreate

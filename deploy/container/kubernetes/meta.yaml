@@ -1,0 +1,114 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meta-main
+data:
+  meta_main.toml: |
+    [[common.log.categories]]
+    handlers = [ 'normal', 'err' ]
+
+    [[common.log.handlers]]
+    async = true
+    name = 'normal'
+    start_level = 'NONE'
+    writer_type = 'STREAM'
+
+    [[common.log.handlers]]
+    async = false
+    name = 'err'
+    start_level = 'ERR'
+    writer_type = 'STREAM'
+
+    [common.monitor]
+    collect_period = '60s'
+    num_collectors = 1
+
+    [[common.monitor.reporters]]
+    type = 'log'
+
+    [server.background_client.io_worker.ibsocket]
+    max_sge = 1
+
+    [[server.base.groups]]
+    services = [ 'MetaSerde' ]
+    [server.base.groups.io_worker.ibsocket]
+    max_sge = 1
+
+    [[server.base.groups]]
+    services = [ 'Core' ]
+    [server.base.groups.io_worker.ibsocket]
+    max_sge = 1
+
+    [server.storage_client.net_client.io_worker.ibsocket]
+    max_sge = 1
+    [server.storage_client.net_client_for_updates.io_worker.ibsocket]
+    max_sge = 1
+
+    [server.mgmtd_client]
+    mgmtd_server_addresses = ["RDMA://mgmtd:8000"]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: meta
+spec:
+  podManagementPolicy: Parallel
+  serviceName: meta
+  ordinals:
+    start: 100
+  replicas: 2
+  selector:
+    matchLabels:
+      app: meta
+  template:
+    metadata:
+      labels:
+        app: meta
+    spec:
+      containers:
+      - name: meta
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-meta
+        # command: ["sleep", "10000"]
+        args:
+        - --cfg=/etc/meta/meta_main.toml
+        - --app_config.node_id=$(POD_INDEX)
+        - --launcher_config.allow_dev_version=true # FIXME
+        - --launcher_config.cluster_id=containerized # FIXME: set by operator
+        - --launcher_config.client.io_worker.ibsocket.max_sge=1
+        resources:
+          requests:
+            aliyun/erdma: "1"
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            aliyun/erdma: "1"
+            memory: "2Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: fdb-cluster-file
+          mountPath: /etc/foundationdb
+        - name: config
+          mountPath: /etc/meta
+        securityContext:
+          privileged: true
+        env:
+        - name: POD_INDEX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        ports:
+        - containerPort: 8001
+          name: meta-serde
+        - containerPort: 9001
+          name: core
+      volumes:
+      - name: fdb-cluster-file
+        configMap:
+          name: fdb-meta-config
+          items:
+          - key: cluster-file
+            path: fdb.cluster
+      - name: config
+        configMap:
+          name: meta-main

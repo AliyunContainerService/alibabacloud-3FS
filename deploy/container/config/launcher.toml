@@ -1,0 +1,4 @@
+allow_dev_version = false
+
+[mgmtd_client]
+mgmtd_server_addresses = ['RDMA://mgmtd:8000']

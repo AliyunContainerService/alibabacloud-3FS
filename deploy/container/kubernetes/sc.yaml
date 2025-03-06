@@ -1,0 +1,27 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: alibabacloud-disk-entry
+parameters:
+  type: cloud_essd_entry,cloud_essd,cloud_auto
+  performanceLevel: PL0
+allowVolumeExpansion: true
+provisioner: diskplugin.csi.alibabacloud.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: alibabacloud-disk-ephemeral
+parameters:
+  type: elastic_ephemeral_disk_standard
+  csi.storage.k8s.io/fstype: xfs
+allowVolumeExpansion: true
+mountOptions:
+- noatime
+- nodiratime
+provisioner: diskplugin.csi.alibabacloud.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer

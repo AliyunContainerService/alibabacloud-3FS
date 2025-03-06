@@ -1,0 +1,138 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-main
+data:
+  storage_main.toml: |
+    [[common.log.categories]]
+    handlers = [ 'normal', 'err' ]
+
+    [[common.log.handlers]]
+    async = true
+    name = 'normal'
+    start_level = 'NONE'
+    writer_type = 'STREAM'
+
+    [[common.log.handlers]]
+    async = false
+    name = 'err'
+    start_level = 'ERR'
+    writer_type = 'STREAM'
+
+    [common.monitor]
+    collect_period = '60s'
+    num_collectors = 1
+
+    [[common.monitor.reporters]]
+    type = 'log'
+
+    [[server.base.groups]]
+    services = [ 'StorageSerde' ]
+    [server.base.groups.io_worker.ibsocket]
+    max_sge = 1
+
+    [[server.base.groups]]
+    services = [ 'Core' ]
+    [server.base.groups.io_worker.ibsocket]
+    max_sge = 1
+
+    [server.client.io_worker.ibsocket]
+    max_sge = 1
+    [server.forward_client.io_worker.ibsocket]
+    max_sge = 1
+
+    [server.mgmtd]
+    mgmtd_server_addresses = ["RDMA://mgmtd:8000"]
+
+    [server.buffer_pool]
+    big_rdmabuf_count = 16
+    big_rdmabuf_size = '64MB'
+    rdmabuf_count = 256
+    rdmabuf_size = '4MB'
+
+    [server.targets]
+    target_paths = ['/mnt/data0', '/mnt/data1']
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: storage
+spec:
+  podManagementPolicy: Parallel
+  serviceName: storage
+  ordinals:
+    start: 10000
+  replicas: 3
+  selector:
+    matchLabels:
+      app: storage
+  template:
+    metadata:
+      labels:
+        app: storage
+    spec:
+      containers:
+      - name: storage
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-storage
+        # command: ["sleep", "10000"]
+        lifecycle:
+          postStart:
+            exec:
+              command: [sysctl, -w, fs.aio-max-nr=67108864]
+        args:
+        - --cfg=/etc/storage/storage_main.toml
+        - --app_config.node_id=$(POD_INDEX)
+        - --launcher_config.allow_dev_version=true # FIXME
+        - --launcher_config.cluster_id=containerized # FIXME: set by operator
+        - --launcher_config.client.io_worker.ibsocket.max_sge=1
+        resources:
+          requests:
+            aliyun/erdma: "1"
+            memory: 2Gi
+            cpu: "500m"
+          limits:
+            aliyun/erdma: "1"
+            memory: 8Gi
+            cpu: "2"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/storage
+        - name: data-0
+          mountPath: /mnt/data0
+        - name: data-1
+          mountPath: /mnt/data1
+        securityContext:
+          privileged: true
+        env:
+        - name: POD_INDEX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        ports:
+        - containerPort: 8000
+          name: storage-serde
+        - containerPort: 9000
+          name: core
+      volumes:
+      - name: config
+        configMap:
+          name: storage-main
+  volumeClaimTemplates:
+  - metadata:
+      name: data-0
+    spec:
+      storageClassName: alibabacloud-disk-ephemeral
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 64Gi
+  - metadata:
+      name: data-1
+    spec:
+      storageClassName: alibabacloud-disk-ephemeral
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 64Gi
