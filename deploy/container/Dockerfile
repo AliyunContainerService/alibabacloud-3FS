@@ -39,14 +39,12 @@ FROM scratch AS fdb-clients
 ADD --link --checksum=sha256:c8ffc7604795719a11c615236c49cc8ac277fddd28caaa5fe670b11e6a54dc2f \
     https://github.com/apple/foundationdb/releases/download/7.1.61/foundationdb-clients_7.1.61-1_amd64.deb /fdb-clients.deb
 
-FROM base AS meta-base
-
-ARG TARGETARCH
+FROM ubuntu:22.04 AS fdb-install
 RUN --mount=type=bind,from=fdb-clients,dst=/fdb \
-    --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGETARCH \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked,id=apt-lib-$TARGETARCH \
-    apt-get update && apt-get install -y /fdb/fdb-clients.deb
+    dpkg -i /fdb/fdb-clients.deb
 
+FROM base AS meta-base
+COPY --link --from=fdb-install /usr/lib/libfdb_c.so /usr/lib/libfdb_c.so
 
 FROM strip AS storage-strip
 RUN --mount=type=bind,from=bin,dst=/build/bin --mount=type=bind,src=strip.sh,dst=/strip.sh /strip.sh storage_main
