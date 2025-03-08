@@ -68,7 +68,7 @@ spec:
     spec:
       containers:
       - name: meta
-        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-meta
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-meta:dev
         # command: ["sleep", "10000"]
         args:
         - --cfg=/etc/meta/meta_main.toml

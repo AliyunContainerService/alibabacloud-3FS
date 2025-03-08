@@ -26,7 +26,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGET
         libgflags2.2 \
         libgoogle-glog0v5 \
         libgoogle-perftools4 \
-        libibverbs1
+        libibverbs1 \
+        libsnappy1v5
 
 FROM ubuntu:22.04 AS strip
 ARG TARGETARCH

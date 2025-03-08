@@ -14,14 +14,14 @@
 namespace hf3fs::kv {
 namespace {
 
-inline rocksdb_internal::Slice slice(std::string_view v) { return rocksdb_internal::Slice{v.data(), v.length()}; }
-inline std::string_view view(rocksdb_internal::Slice s) { return std::string_view{s.data(), s.size()}; }
+inline rocksdb::Slice slice(std::string_view v) { return rocksdb::Slice{v.data(), v.length()}; }
+inline std::string_view view(rocksdb::Slice s) { return std::string_view{s.data(), s.size()}; }
 
 using RocksDBBatchOperationsPool = ObjectPool<RocksDBStore::RocksDBBatchOperations>;
 using RocksDBIteratorPool = ObjectPool<RocksDBStore::RocksDBIterator>;
 
-std::shared_ptr<rocksdb_internal::Cache> sharedBlockCache(size_t capacity) {
-  static std::shared_ptr<rocksdb_internal::Cache> cache{rocksdb_internal::NewLRUCache(capacity)};
+std::shared_ptr<rocksdb::Cache> sharedBlockCache(size_t capacity) {
+  static std::shared_ptr<rocksdb::Cache> cache{rocksdb::NewLRUCache(capacity)};
   return cache;
 }
 
@@ -31,7 +31,7 @@ constexpr size_t rocksdbPrefixLen = 12;
 
 // get value corresponding to key.
 Result<std::string> RocksDBStore::get(std::string_view key) {
-  rocksdb_internal::ReadOptions options;
+  rocksdb::ReadOptions options;
   std::string value;
   auto status = db_->Get(options, slice(key), &value);
   if (UNLIKELY(!status.ok())) {
@@ -49,10 +49,10 @@ Result<Void> RocksDBStore::iterateKeysWithPrefix(std::string_view prefix,
                                                  uint32_t limit,
                                                  IterateFunc func,
                                                  std::optional<std::string> *nextValidKey /* = nullptr */) {
-  rocksdb_internal::ReadOptions options;
+  rocksdb::ReadOptions options;
   options.readahead_size = config_.rocksdb_readahead_size();
   options.prefix_same_as_start = config_.rocksdb_enable_prefix_transform() && prefix.size() >= rocksdbPrefixLen;
-  std::unique_ptr<rocksdb_internal::Iterator> iterator{db_->NewIterator(options)};
+  std::unique_ptr<rocksdb::Iterator> iterator{db_->NewIterator(options)};
   iterator->Seek(slice(prefix));
   bool prefixBreak = false;
   for (uint32_t i = 0; iterator->Valid() && i < limit; ++i, iterator->Next()) {
@@ -77,7 +77,7 @@ Result<Void> RocksDBStore::iterateKeysWithPrefix(std::string_view prefix,
 
 // put a key-value pair.
 Result<Void> RocksDBStore::put(std::string_view key, std::string_view value, bool sync /* = false */) {
-  rocksdb_internal::WriteOptions options;
+  rocksdb::WriteOptions options;
   options.sync = config_.sync_when_write() || sync;
   auto status = db_->Put(options, slice(key), slice(value));
   if (UNLIKELY(!status.ok())) {
@@ -90,7 +90,7 @@ Result<Void> RocksDBStore::put(std::string_view key, std::string_view value, boo
 
 // remove a key-value pair.
 Result<Void> RocksDBStore::remove(std::string_view key) {
-  rocksdb_internal::WriteOptions options;
+  rocksdb::WriteOptions options;
   options.sync = config_.sync_when_write();
   auto status = db_->Delete(options, slice(key));
   if (UNLIKELY(!status.ok())) {
@@ -109,7 +109,7 @@ void RocksDBStore::RocksDBBatchOperations::put(std::string_view key, std::string
 void RocksDBStore::RocksDBBatchOperations::remove(std::string_view key) { writeBatch_.Delete(slice(key)); }
 
 Result<Void> RocksDBStore::RocksDBBatchOperations::commit() {
-  rocksdb_internal::WriteOptions options;
+  rocksdb::WriteOptions options;
   options.sync = db_.config_.sync_when_write();
   auto status = db_.db_->Write(options, &writeBatch_);
   if (UNLIKELY(!status.ok())) {
@@ -143,9 +143,9 @@ std::string_view RocksDBStore::RocksDBIterator::key() const { return view(iterat
 std::string_view RocksDBStore::RocksDBIterator::value() const { return view(iterator_->value()); }
 void RocksDBStore::RocksDBIterator::destroy() { RocksDBIteratorPool::Ptr{this}; }
 KVStore::IteratorPtr RocksDBStore::createIterator() {
-  rocksdb_internal::ReadOptions options;
+  rocksdb::ReadOptions options;
   options.readahead_size = config_.rocksdb_readahead_size();
-  std::unique_ptr<rocksdb_internal::Iterator> it(db_->NewIterator(options));
+  std::unique_ptr<rocksdb::Iterator> it(db_->NewIterator(options));
   if (UNLIKELY(it == nullptr)) {
     return nullptr;
   }
@@ -154,8 +154,8 @@ KVStore::IteratorPtr RocksDBStore::createIterator() {
 
 // initialize rocksdb.
 Result<Void> RocksDBStore::init(const Options &optionsIn) {
-  rocksdb_internal::Options options;
-  rocksdb_internal::BlockBasedTableOptions table_options;
+  rocksdb::Options options;
+  rocksdb::BlockBasedTableOptions table_options;
 
   options.create_if_missing = optionsIn.createIfMissing;
   options.max_manifest_file_size = config_.rocksdb_max_manifest_file_size();
@@ -171,11 +171,11 @@ Result<Void> RocksDBStore::init(const Options &optionsIn) {
   options.compression = config_.rocksdb_compression();
   options.level0_file_num_compaction_trigger = config_.rocksdb_level0_file_num_compaction_trigger();
   if (config_.rocksdb_enable_prefix_transform()) {
-    options.prefix_extractor.reset(rocksdb_internal::NewFixedPrefixTransform(rocksdbPrefixLen));
+    options.prefix_extractor.reset(rocksdb::NewFixedPrefixTransform(rocksdbPrefixLen));
   }
   if (config_.rocksdb_enable_bloom_filter()) {
     table_options.filter_policy.reset(
-        rocksdb_internal::NewBloomFilterPolicy(config_.rocksdb_bloom_filter_bits_per_key()));
+        rocksdb::NewBloomFilterPolicy(config_.rocksdb_bloom_filter_bits_per_key()));
   }
   options.num_levels = config_.rocksdb_num_levels();
   options.target_file_size_base = config_.rocksdb_target_file_size_base();
@@ -183,20 +183,20 @@ Result<Void> RocksDBStore::init(const Options &optionsIn) {
   if (config_.rocksdb_shared_block_cache()) {
     table_options.block_cache = sharedBlockCache(config_.rocksdb_block_cache_size());
   } else {
-    table_options.block_cache = rocksdb_internal::NewLRUCache(config_.rocksdb_block_cache_size());
+    table_options.block_cache = rocksdb::NewLRUCache(config_.rocksdb_block_cache_size());
   }
   table_options.cache_index_and_filter_blocks = true;
-  table_options.index_type = rocksdb_internal::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
+  table_options.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
   table_options.block_size = config_.rocksdb_block_size();
   table_options.prepopulate_block_cache = config_.rocksdb_prepopulate_block_cache();
 
-  options.table_factory.reset(rocksdb_internal::NewBlockBasedTableFactory(table_options));
+  options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.IncreaseParallelism(config_.rocksdb_threads_num());
   options.wal_recovery_mode = config_.rocksdb_wal_recovery_mode();
   options.keep_log_file_num = config_.rocksdb_keep_log_file_num();
 
-  rocksdb_internal::DB *db = nullptr;
-  auto status = rocksdb_internal::DB::Open(options, optionsIn.path.string(), &db);
+  rocksdb::DB *db = nullptr;
+  auto status = rocksdb::DB::Open(options, optionsIn.path.string(), &db);
   if (UNLIKELY(!status.ok())) {
     auto msg = fmt::format("RocksDB init error: {}", status.ToString());
     XLOG(ERR, msg);

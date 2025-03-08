@@ -23,6 +23,12 @@ macro(target_add_lib NAME)
     target_link_libraries(${NAME} ${ARGN} "")
 endmacro()
 
+macro(target_add_shared_from NAME)
+    add_library(${NAME} SHARED $<TARGET_OBJECTS:${ARGN}>)
+    target_link_libraries(${NAME} ${ARGN})
+    target_enable_ipo(${NAME})
+endmacro()
+
 macro(target_add_shared_lib NAME)
     file(GLOB_RECURSE FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.cc" "*.h")
     add_library(${NAME} SHARED ${FILES} ${FBS_FILES})

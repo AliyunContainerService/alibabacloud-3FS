@@ -75,7 +75,7 @@ spec:
     spec:
       containers:
       - name: storage
-        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-storage
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-storage:dev
         # command: ["sleep", "10000"]
         lifecycle:
           postStart:

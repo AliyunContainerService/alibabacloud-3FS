@@ -46,14 +46,14 @@ class RocksDBStore : public KVStore {
 
    private:
     RocksDBStore &db_;
-    rocksdb_internal::WriteBatch writeBatch_;
+    rocksdb::WriteBatch writeBatch_;
   };
   BatchOptionsPtr createBatchOps() override;
 
   // iterator.
   class RocksDBIterator : public Iterator {
    public:
-    RocksDBIterator(std::unique_ptr<rocksdb_internal::Iterator> it)
+    RocksDBIterator(std::unique_ptr<rocksdb::Iterator> it)
         : iterator_(std::move(it)) {}
     void seek(std::string_view key) override;
     void seekToFirst() override;
@@ -66,7 +66,7 @@ class RocksDBStore : public KVStore {
     void destroy() override;
 
    private:
-    std::unique_ptr<rocksdb_internal::Iterator> iterator_;
+    std::unique_ptr<rocksdb::Iterator> iterator_;
   };
   IteratorPtr createIterator() override;
 
@@ -79,7 +79,7 @@ class RocksDBStore : public KVStore {
 
  private:
   const Config &config_;
-  std::unique_ptr<rocksdb_internal::DB> db_;
+  std::unique_ptr<rocksdb::DB> db_;
 };
 
 }  // namespace hf3fs::kv

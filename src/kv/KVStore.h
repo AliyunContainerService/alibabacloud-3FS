@@ -38,9 +38,9 @@ class KVStore {
     CONFIG_ITEM(rocksdb_avoid_flush_during_recovery, false);
     CONFIG_ITEM(rocksdb_avoid_flush_during_shutdown, false);
     CONFIG_ITEM(rocksdb_avoid_unnecessary_blocking_io, false);
-    CONFIG_ITEM(rocksdb_lowest_used_cache_tier, rocksdb_internal::CacheTier::kNonVolatileBlockTier);
+    CONFIG_ITEM(rocksdb_lowest_used_cache_tier, rocksdb::CacheTier::kNonVolatileBlockTier);
     CONFIG_ITEM(rocksdb_write_buffer_size, 16_MB, ConfigCheckers::checkGE<size_t, 4_MB>);
-    CONFIG_ITEM(rocksdb_compression, rocksdb_internal::CompressionType::kNoCompression);
+    CONFIG_ITEM(rocksdb_compression, rocksdb::CompressionType::kNoCompression);
     CONFIG_ITEM(rocksdb_level0_file_num_compaction_trigger, 4, ConfigCheckers::checkGE<int, 2>);
     CONFIG_ITEM(rocksdb_enable_prefix_transform, true);
     CONFIG_ITEM(rocksdb_enable_bloom_filter, true);
@@ -52,9 +52,9 @@ class KVStore {
     CONFIG_ITEM(rocksdb_shared_block_cache, true);
     CONFIG_ITEM(rocksdb_block_size, 4_KB, ConfigCheckers::checkGE<size_t, 4_KB>);
     CONFIG_ITEM(rocksdb_prepopulate_block_cache,
-                rocksdb_internal::BlockBasedTableOptions::PrepopulateBlockCache::kDisable);
+                rocksdb::BlockBasedTableOptions::PrepopulateBlockCache::kDisable);
     CONFIG_ITEM(rocksdb_threads_num, 8u, ConfigCheckers::checkPositive);
-    CONFIG_ITEM(rocksdb_wal_recovery_mode, rocksdb_internal::WALRecoveryMode::kTolerateCorruptedTailRecords);
+    CONFIG_ITEM(rocksdb_wal_recovery_mode, rocksdb::WALRecoveryMode::kTolerateCorruptedTailRecords);
     CONFIG_ITEM(rocksdb_keep_log_file_num, 10u);
     CONFIG_HOT_UPDATED_ITEM(rocksdb_readahead_size, 2_MB);
   };

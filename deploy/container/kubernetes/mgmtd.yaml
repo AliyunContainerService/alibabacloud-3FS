@@ -60,7 +60,7 @@ spec:
     spec:
       containers:
       - name: mgmtd
-        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-mgmtd
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-mgmtd:dev
         # command: ["sleep", "10000"]
         args:
         - --cfg=/etc/mgmtd/mgmtd_main.toml
