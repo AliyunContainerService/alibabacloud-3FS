@@ -43,3 +43,6 @@
 [submodule "third_party/arrow"]
 	path = third_party/arrow
 	url = https://github.com/apache/arrow.git
+[submodule "third_party/libfuse"]
+	path = third_party/libfuse
+	url = https://github.com/libfuse/libfuse.git

@@ -74,6 +74,14 @@ ExternalProject_Add(folly
 )
 ExternalProject_Add_StepDependencies(folly configure fmt zstd liburing)
 
+ExternalProject_Add(libfuse
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libfuse
+    INSTALL_DIR ${INSTALL_DIR}
+    CONFIGURE_COMMAND meson setup --prefix <INSTALL_DIR> --buildtype release --default-library static -D examples=false -D tests=false -D utils=false <SOURCE_DIR>
+    BUILD_COMMAND ninja
+    INSTALL_COMMAND ninja install
+)
+
 ExternalProject_Add(mimalloc
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mimalloc
     INSTALL_DIR ${INSTALL_DIR}
@@ -88,12 +96,12 @@ ExternalProject_add(jemalloc
 )
 
 add_library(3fs_deps INTERFACE)
-add_dependencies(3fs_deps zstd liburing rocksdb leveldb arrow fmt folly mimalloc jemalloc)
+add_dependencies(3fs_deps zstd liburing rocksdb leveldb arrow libfuse fmt folly mimalloc jemalloc)
 
 ExternalProject_add(3fs
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..
     INSTALL_DIR ${INSTALL_DIR}
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+    CMAKE_ARGS -DCMAKE_PREFIX_PATH=<INSTALL_DIR>
     BUILD_COMMAND ${CMAKE_COMMAND} --build . -t mgmtd_main meta_main storage_main admin_cli hf3fs_fuse_main
     USES_TERMINAL_BUILD ON
     BUILD_ALWAYS ON
