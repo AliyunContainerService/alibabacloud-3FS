@@ -88,20 +88,36 @@ yum install cmake libuv-devel lz4-devel xz-devel double-conversion-devel libdwar
 
 Install other build prerequisites:
 
-- [`libfuse`](https://github.com/libfuse/libfuse/releases/tag/fuse-3.16.1) 3.16.1 or newer version
 - [FoundationDB](https://apple.github.io/foundationdb/getting-started-linux.html) 7.1 or newer version
 - [Rust](https://www.rust-lang.org/tools/install) toolchain: minimal 1.75.0, recommended 1.85.0 or newer version (latest stable version) 
 
 ## Build 3FS
 
-Build 3FS in `build` folder:
+Build 3FS with super project (a project that builds all dependencies along with 3FS):
 
-    cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER=clang-14 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-    cmake --build build -j 32
+```bash
+cd super
+./build.sh
+```
+
+You can find the resulting binary in `super/build/3fs-prefix/src/3fs-build/bin`.
+
+Once you have built the dependencies, you may want to setup a debug build tree for development with:
+
+```bash
+cmake -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER=clang-14 \
+  -DCMAKE_PREFIX_PATH="$(pwd)/super/build/usr" \
+  -S . -B build -G Ninja
+```
+
+To pack the binaries into container images, run `PREFIX=registry.example.com/3fs PUSH=true ./deploy/container/build.sh`. `buildctl` is required.
 
 ## Run a test cluster
 
 Follow instructions in [setup guide](deploy/README.md) to run a test cluster.
+
+Follow [Kubernetes setup guide](deploy/container/README.md) to setup a test cluster on Alibaba Cloud in 10 minutes.
 
 ## Report Issues
 

@@ -2,7 +2,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: fuse-main
+  name: fuse-main-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fuse
 data:
   fuse_main.toml: |
     [[common.log.categories]]
@@ -37,21 +41,25 @@ data:
     max_sge = 1
 
     [mgmtd]
-    mgmtd_server_addresses = ["RDMA://mgmtd:8000"]
+    mgmtd_server_addresses = ["RDMA://mgmtd-{{ .Release.Name }}:8000"]
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: fuse
+  name: fuse-{{ .Release.Name }}
   labels:
-    app: fuse
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: fuse
 spec:
   containers:
   - name: fuse
-    image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-fuse
+    image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-fuse:dev
+    imagePullPolicy: Always
     args:
     - --cfg=/etc/fuse/fuse_main.toml
-    - --launcher_config.cluster_id=containerized # FIXME: set by operator
+    - --launcher_config.mgmtd_client.mgmtd_server_addresses=["RDMA://mgmtd-{{ .Release.Name }}:8000"]
+    - --launcher_config.cluster_id={{.Values.clusterID}}
     - --launcher_config.client.io_worker.ibsocket.max_sge=1
     resources:
       requests:
@@ -75,10 +83,10 @@ spec:
   volumes:
   - name: config
     configMap:
-      name: fuse-main
+      name: fuse-main-{{ .Release.Name }}
   - name: token
     secret:
-      secretName: root-token
+      secretName: root-token-{{ .Release.Name }}
   - name: mnt
     hostPath:
       path: /mnt/3fs

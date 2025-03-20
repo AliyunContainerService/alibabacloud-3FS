@@ -1,0 +1,102 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: init-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: init-job
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: init-{{ .Release.Name }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [root-token-{{ .Release.Name }}]
+    verbs: [update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: init-{{ .Release.Name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: init-{{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: init-{{ .Release.Name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: root-token-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: init-job
+  annotations:
+    helm.sh/hook: post-install
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      containers:
+      - name: init
+        image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-init:dev
+        imagePullPolicy: Always
+        args:
+        - --cfg=/etc/3fs/admin_cli.toml
+        - --config.cluster_id={{.Values.clusterID}}
+        env:
+        - name: REPLICATION_FACTOR
+          value: {{ .Values.dataPlacement.replicationFactor | quote }}
+        - name: STORAGE_NODES
+          value: {{ .Values.dataPlacement.storageNodes | quote }}
+        - name: DISKS_PER_NODE
+          value: {{ .Values.dataPlacement.disksPerNode | quote }}
+        - name: MIN_TARGETS_PER_DISK
+          value: {{ .Values.dataPlacement.minTargetsPerDisk | quote }}
+        - name: STRIPE_SIZE
+          value: {{ .Values.dataPlacement.stripeSize | quote }}
+        - name: ROOT_TOKEN_NAME
+          value: root-token-{{ .Release.Name }}
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            aliyun/erdma: "1"
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/3fs
+        - name: fdb-cluster-file
+          mountPath: /etc/foundationdb
+        - name: output
+          mountPath: /root/output
+      restartPolicy: Never
+      serviceAccountName: init-{{ .Release.Name }}
+      volumes:
+      - name: config
+        configMap:
+          name: cli-{{ .Release.Name }}
+      - name: fdb-cluster-file
+        configMap:
+          name: fdb-meta-{{ .Release.Name }}-config
+          items:
+          - key: cluster-file
+            path: fdb.cluster
+      - name: output
+        emptyDir: {}

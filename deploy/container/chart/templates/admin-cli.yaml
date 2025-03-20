@@ -1,7 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cli
+  name: cli-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cli
 data:
   admin_cli.toml: |
     log = 'WARN; default=stream:stream=stderr'
@@ -12,22 +16,25 @@ data:
     [storage_client.net_client_for_updates.io_worker.ibsocket]
     max_sge = 1
     [mgmtd_client]
-    mgmtd_server_addresses = ["RDMA://mgmtd:8000"]
+    mgmtd_server_addresses = ["RDMA://mgmtd-{{ .Release.Name }}:8000"]
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: admin-cli
+  name: admin-cli-{{ .Release.Name }}
   labels:
-    name: admin-cli
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cli
 spec:
   terminationGracePeriodSeconds: 2
   containers:
   - name: admin-cli
-    image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-admin-cli
+    image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-admin-cli:dev
+    imagePullPolicy: Always
     args:
     - --cfg=/etc/3fs/admin_cli.toml
-    - --config.cluster_id=containerized # FIXME: set by operator
+    - --config.cluster_id={{.Values.clusterID}}
     - --config.user_info.token=$(TOKEN)
     tty: true
     stdin: true
@@ -54,10 +61,10 @@ spec:
   volumes:
   - name: config
     configMap:
-      name: cli
+      name: cli-{{ .Release.Name }}
   - name: fdb-cluster-file
     configMap:
-      name: fdb-meta-config
+      name: fdb-meta-{{ .Release.Name }}-config
       items:
       - key: cluster-file
         path: fdb.cluster

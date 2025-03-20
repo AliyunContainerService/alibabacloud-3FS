@@ -1,0 +1,5 @@
+name: 3FS
+apiVersion: v2
+version: 0.1.0
+appVersion: 0.1.5
+type: application

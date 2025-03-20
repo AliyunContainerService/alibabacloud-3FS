@@ -89,9 +89,31 @@ ARG TARGETARCH
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGETARCH \
     --mount=type=cache,target=/var/lib/apt,sharing=locked,id=apt-lib-$TARGETARCH \
     apt-get update && apt-get install libnuma1
-COPY --link --from=bin libfuse3.so.3 /usr/local/lib/x86_64-linux-gnu/libfuse3.so.3
 COPY --link /fuse /etc
 COPY --link --from=fuse-strip /out/hf3fs_fuse_main /usr/local/bin/hf3fs_fuse_main
 ENTRYPOINT ["/usr/local/bin/hf3fs_fuse_main", "--launcher_cfg", "/etc/launcher.toml", "--app-cfg", "/etc/app.toml"]
 FROM fuse AS fuse-debug
 COPY --link --from=fuse-strip /out/.build-id /usr/lib/debug/.build-id
+
+
+FROM meta-base AS init-base
+ARG TARGETARCH
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGETARCH \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked,id=apt-lib-$TARGETARCH \
+    apt-get update && apt-get install -y python3 curl
+
+FROM init-base AS init-install
+ARG TARGETARCH
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGETARCH \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked,id=apt-lib-$TARGETARCH \
+    apt-get update && apt-get install -y python3-pip
+
+RUN --mount=type=bind,from=data_placement,src=/requirements.txt,dst=/data_placement/requirements.txt \
+    mkdir -p /install && pip install --root /install -r /data_placement/requirements.txt
+
+FROM init-base AS init
+COPY --link --from=admin-cli-strip /out/admin_cli /usr/local/bin/admin_cli
+COPY --link --from=init-install /install /
+COPY --link --from=data_placement / /root/data_placement
+COPY --link init.sh /usr/local/bin/init.sh
+ENTRYPOINT ["/usr/local/bin/init.sh"]

@@ -3,6 +3,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mgmtd-main
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: mgmtd
 data:
   mgmtd_main.toml: |
     [[common.log.categories]]
@@ -43,30 +47,38 @@ data:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mgmtd
+  name: mgmtd-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: mgmtd
 spec:
   podManagementPolicy: Parallel
-  serviceName: mgmtd
+  serviceName: mgmtd-{{ .Release.Name }}
   ordinals:
     start: 1
   replicas: 2
   selector:
     matchLabels:
-      app: mgmtd
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: mgmtd
   template:
     metadata:
       labels:
-        app: mgmtd
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: mgmtd
     spec:
       containers:
       - name: mgmtd
         image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-mgmtd:dev
-        # command: ["sleep", "10000"]
+        imagePullPolicy: Always
         args:
         - --cfg=/etc/mgmtd/mgmtd_main.toml
         - --app_config.node_id=$(POD_INDEX)
         - --launcher_config.allow_dev_version=true # FIXME
-        - --launcher_config.cluster_id=containerized # FIXME: set by operator
+        - --launcher_config.cluster_id={{.Values.clusterID}}
         resources:
           requests:
             aliyun/erdma: "1"
@@ -96,7 +108,7 @@ spec:
       volumes:
       - name: fdb-cluster-file
         configMap:
-          name: fdb-meta-config
+          name: fdb-meta-{{ .Release.Name }}-config
           items:
           - key: cluster-file
             path: fdb.cluster
@@ -107,8 +119,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mgmtd
+  name: mgmtd-{{ .Release.Name }}
 spec:
   selector:
-    app: mgmtd
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: mgmtd
   clusterIP: None

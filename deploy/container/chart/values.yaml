@@ -1,0 +1,8 @@
+clusterID: containerized
+
+dataPlacement:
+  replicationFactor: 2
+  storageNodes: 3
+  disksPerNode: 2
+  minTargetsPerDisk: 16
+  stripeSize: 16

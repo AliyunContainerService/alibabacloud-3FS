@@ -2,7 +2,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: meta-main
+  name: meta-main-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: meta
 data:
   meta_main.toml: |
     [[common.log.categories]]
@@ -46,35 +50,44 @@ data:
     max_sge = 1
 
     [server.mgmtd_client]
-    mgmtd_server_addresses = ["RDMA://mgmtd:8000"]
+    mgmtd_server_addresses = ["RDMA://mgmtd-{{ .Release.Name }}:8000"]
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: meta
+  name: meta-{{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: meta
 spec:
   podManagementPolicy: Parallel
-  serviceName: meta
+  serviceName: meta-{{ .Release.Name }}
   ordinals:
     start: 100
   replicas: 2
   selector:
     matchLabels:
-      app: meta
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: meta
   template:
     metadata:
       labels:
-        app: meta
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: meta
     spec:
       containers:
       - name: meta
         image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-meta:dev
-        # command: ["sleep", "10000"]
+        imagePullPolicy: Always
         args:
         - --cfg=/etc/meta/meta_main.toml
         - --app_config.node_id=$(POD_INDEX)
         - --launcher_config.allow_dev_version=true # FIXME
-        - --launcher_config.cluster_id=containerized # FIXME: set by operator
+        - --launcher_config.cluster_id={{.Values.clusterID}}
+        - --launcher_config.mgmtd_client.mgmtd_server_addresses=["RDMA://mgmtd-{{ .Release.Name }}:8000"]
         - --launcher_config.client.io_worker.ibsocket.max_sge=1
         resources:
           requests:
@@ -105,10 +118,10 @@ spec:
       volumes:
       - name: fdb-cluster-file
         configMap:
-          name: fdb-meta-config
+          name: fdb-meta-{{ .Release.Name }}-config
           items:
           - key: cluster-file
             path: fdb.cluster
       - name: config
         configMap:
-          name: meta-main
+          name: meta-main-{{ .Release.Name }}
