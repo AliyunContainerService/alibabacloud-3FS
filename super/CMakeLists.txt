@@ -92,7 +92,7 @@ ExternalProject_add(jemalloc
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/jemalloc
     INSTALL_DIR ${INSTALL_DIR}
     BUILD_IN_SOURCE ON
-    CONFIGURE_COMMAND ./autogen.sh --prefix=<INSTALL_DIR> --disable-cxx --enable-prof --disable-initial-exec-tls
+    CONFIGURE_COMMAND ./autogen.sh --prefix=<INSTALL_DIR> --disable-cxx --enable-prof --disable-initial-exec-tls --disable-shared
 )
 
 add_library(3fs_deps INTERFACE)
