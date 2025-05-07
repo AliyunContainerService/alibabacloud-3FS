@@ -725,6 +725,7 @@ index 1668b04fa..ac22ff283 100644
 +        if (!promise.context_.has_value()) {
            promise.setRequestContext(RequestContext::saveContext());
          }
+ 
 diff --git a/folly/experimental/exception_tracer/CMakeLists.txt b/folly/experimental/exception_tracer/CMakeLists.txt
 index 6156f5362..cb3306e69 100644
 --- a/folly/experimental/exception_tracer/CMakeLists.txt
