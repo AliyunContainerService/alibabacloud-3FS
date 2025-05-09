@@ -90,6 +90,7 @@ find_package(Arrow REQUIRED)
 find_package(Parquet REQUIRED)
 find_package(uring REQUIRED)  # RocksDB provides this
 find_package(mimalloc REQUIRED)
+find_package(FoundationDB-Client REQUIRED)
 pkg_check_modules(jemalloc REQUIRED IMPORTED_TARGET jemalloc)
 pkg_check_modules(fuse3 REQUIRED IMPORTED_TARGET fuse3)
 
