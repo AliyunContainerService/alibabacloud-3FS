@@ -146,7 +146,7 @@ CoTryTask<void> ResyncWorker::handleSync(VersionedChainId vChainId) {
   uint32_t currentSyncingSkipCount = 0;
   auto recordGuard = resyncRecorder.record(tag);
 
-  auto remainingChunksCount = syncingRemainingChunksCount.getRecoderWithTag(tag);
+  auto remainingChunksCount = syncingRemainingChunksCount.getRecorderWithTag(tag);
   SCOPE_EXIT { remainingChunksCount->set(0); };
 
   // 3. sync start.
@@ -279,7 +279,7 @@ CoTryTask<void> ResyncWorker::handleSync(VersionedChainId vChainId) {
     XLOG(CRITICAL, msg);
 
     OfflineTargetReq req;
-    req.targetId = targetId;
+    req.targetId = target->successor->targetInfo.targetId;
     req.force = true;
     CO_RETURN_AND_LOG_ON_ERROR(co_await components_.messenger.offlineTarget(*addrResult, req, &options));
 
