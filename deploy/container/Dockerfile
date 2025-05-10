@@ -8,6 +8,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGET
     --mount=type=bind,src=erdma.acs,dst=/context/erdma.acs \
     cp /context/erdma.acs /etc/apt/keyrings/erdma.asc && \
     echo "deb [signed-by=/etc/apt/keyrings/erdma.asc] http://mirrors.aliyun.com/erdma/apt/ubuntu jammy/erdma main" > /etc/apt/sources.list.d/erdma.list && \
+    sed -i 's|http://.*\.ubuntu\.com|http://mirrors.aliyun.com|g' /etc/apt/sources.list && \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update && \
     apt-get install -y \
@@ -109,6 +110,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGET
     apt-get update && apt-get install -y python3-pip
 
 RUN --mount=type=bind,from=data_placement,src=/requirements.txt,dst=/data_placement/requirements.txt \
+    --mount=type=bind,src=pip.conf,dst=/root/.pip/pip.conf \
     mkdir -p /install && pip install --root /install -r /data_placement/requirements.txt
 
 FROM init-base AS init
