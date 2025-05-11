@@ -17,7 +17,7 @@ ExternalProject_Add(liburing
     BUILD_IN_SOURCE ON
     INSTALL_DIR ${INSTALL_DIR}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR>
-    BUILD_COMMAND make ENABLE_SHARED=0 -j8
+    BUILD_COMMAND make -C src ENABLE_SHARED=0 -j8
     INSTALL_COMMAND make install ENABLE_SHARED=0
 )
 
