@@ -91,8 +91,16 @@ ExternalProject_Add(mimalloc
 ExternalProject_add(jemalloc
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/jemalloc
     INSTALL_DIR ${INSTALL_DIR}
-    BUILD_IN_SOURCE ON
-    CONFIGURE_COMMAND ./autogen.sh --prefix=<INSTALL_DIR> --disable-cxx --enable-prof --disable-initial-exec-tls --disable-shared
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --disable-cxx --enable-prof --disable-initial-exec-tls --disable-shared
+    BUILD_COMMAND make -j8 build_lib
+    INSTALL_COMMAND make install_lib
+)
+ExternalProject_Add_Step(jemalloc autoconf
+    COMMAND autoconf
+    DEPENDEES update
+    DEPENDERS configure
+    INDEPENDENT ON
+    WORKING_DIRECTORY <SOURCE_DIR>
 )
 
 add_library(3fs_deps INTERFACE)
