@@ -117,7 +117,7 @@ cmake -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -S . -B build -G Ninja
 ```
 
-To pack the binaries into container images, run `PREFIX=registry.example.com/3fs PUSH=true ./deploy/container/build.sh`. `buildctl` is required.
+To pack the binaries into container images, run `PREFIX=registry.example.com/3fs docker buildx bake --file ./deploy/container/docker-bake.hcl --push`
 
 ## Run a test cluster
 

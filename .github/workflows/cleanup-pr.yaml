@@ -1,0 +1,38 @@
+name: Cleanup on Pull Request Close
+
+on:
+  pull_request:
+    types: [ closed ]
+
+jobs:
+  clear-caches:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: clear cache
+        run: |
+          gh cache list --ref "$BRANCH" --limit 10000 --json id -q '.[]|.id' | \
+              xargs -P 5 -n 1 --no-run-if-empty gh cache delete
+          echo "Cache cleared"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: refs/pull/${{ github.event.pull_request.number }}/merge
+
+  clear-ghcr:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - id: meta
+        run: |
+          repo=${{ github.repository }}
+          pr=${{ github.event.pull_request.number }}
+          p=$(basename ${repo@L})/3fs
+          echo "pkgs=$p-meta,$p-storage,$p-mgmtd,$p-admin-cli,$p-fuse,$p-init" >> "$GITHUB_OUTPUT"
+          echo "tags=pr-$pr,pr-$pr-debug" >> "$GITHUB_OUTPUT"
+      - uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: ${{ steps.meta.outputs.pkgs }}
+          delete-tags: ${{ steps.meta.outputs.tags }}
