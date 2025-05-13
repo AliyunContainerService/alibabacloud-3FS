@@ -1,5 +1,6 @@
 #include "MgmtdClient.h"
 
+#include <algorithm>
 #include <folly/Overload.h>
 #include <folly/Synchronized.h>
 #include <folly/concurrency/AtomicSharedPtr.h>
@@ -148,7 +149,11 @@ struct MgmtdClient::Impl {
         uint32_t id = 0;
         auto result = scn::scan(String(error.message()), "{}", id);
         if (result) {
-          if (mgmtds_.contains(flat::NodeId(id))) {
+          if (conn.nodeId == id) {
+            // The node ID that recieved the request is not the one we intended for.
+            // Make sure we will go through probePrimary for this case.
+            XLOGF(WARN, "MgmtdClient: primary node said it is not: {}", flat::NodeId(id));
+          } else if (mgmtds_.contains(flat::NodeId(id))) {
             XLOGF(INFO, "MgmtdClient: found potential primary: {}", flat::NodeId(id));
             co_return flat::NodeId(id);
           } else {
@@ -423,7 +428,7 @@ struct MgmtdClient::Impl {
   }
 
   CoTryTask<void> connect(ProbeContext &probeContext) {
-    CO_RETURN_ON_ERROR(initMgmtds());
+    CO_RETURN_ON_ERROR(verifyAddresses());
     XLOGF(INFO, "MgmtdClient: start probe for connecting ...");
     auto primaryRes = co_await probePrimary(probeContext);
     if (!primaryRes.hasError() && primaryRes->has_value()) {
@@ -459,17 +464,14 @@ struct MgmtdClient::Impl {
     co_return co_await std::move(waitItem);
   }
 
-  Result<Void> initMgmtds() {
+  Result<Void> verifyAddresses() {
     const auto &serverAddrs = config_.mgmtd_server_addresses();
     if (serverAddrs.empty()) {
       return makeError(StatusCode::kInvalidConfig, "Empty mgmtdServers");
     }
     std::vector<net::Address> resolved;
     for (const auto &addr : serverAddrs) {
-      auto res = addr.resolve(std::back_inserter(resolved));
-      if (res.hasError()) {
-        XLOG(WARN, "resolve mgmtd address: ", res.error().describe());
-      }
+      RETURN_ON_ERROR(addr.resolve(std::back_inserter(resolved)));
     }
     if (resolved.empty()) {
       return makeError(StatusCode::kInvalidConfig, "No resolved mgmtdServers");
@@ -484,7 +486,6 @@ struct MgmtdClient::Impl {
                                      addr.toString(),
                                      magic_enum::enum_name(*config_.network_type())));
       }
-      addrMap_.try_emplace(addr, flat::NodeId(0));  // 0 denotes "UNKNOWN"
     }
     return Void{};
   }
@@ -542,19 +543,29 @@ struct MgmtdClient::Impl {
       co_return std::nullopt;
     }
 
-    if (addrMap_[conn.addr()] == primary.nodeId) {
+    auto &newConn = getMgmtdConn(primary.nodeId);
+    auto &a  = newConn.addrs;
+    if (std::find(a.begin(), a.end(), conn.addr()) != a.end()) {
       XLOGF(INFO, "MgmtdClient: probePrimary succeeded at {}", primary.nodeId);
       co_return primary.nodeId;
     }
 
-    co_return co_await probePrimary(probeContext, getMgmtdConn(primary.nodeId), probeChainLength + 1);
+    co_return co_await probePrimary(probeContext, newConn, probeChainLength + 1);
   }
 
   CoTryTask<std::optional<flat::NodeId>> probeUnknownAddrs(ProbeContext &probeContext) {
-    for (auto [addr, nodeId] : addrMap_) {
-      if (nodeId == flat::NodeId(0)) {  // only probe unknown addrs
-        XLOGF(INFO, "MgmtdClient: start probe from unknown address {}", addr);
-        auto res = co_await probePrimary(addr);
+    for (const auto &addr : config_.mgmtd_server_addresses()) {
+      std::vector<net::Address> resolved;
+      auto res = addr.resolve(std::back_inserter(resolved));
+      if (res.hasError()) {
+        XLOG(WARN, "resolve mgmtd address: ", res.error().describe());
+      }
+
+      for (auto addr : resolved) {
+        XLOGF(INFO, "MgmtdClient: start probe from configured address {}", addr);
+        Conn conn;
+        conn.addrs.push_back(addr);
+        auto res = co_await probePrimary(probeContext, conn);
         if (res.hasError() && res.error().code() == kSkipThisNode) continue;
         co_return res;
       }
@@ -587,17 +598,8 @@ struct MgmtdClient::Impl {
     co_return co_await probeUnknownAddrs(probeContext);
   }
 
-  // probe primary in DFS from an address
-  CoTryTask<std::optional<flat::NodeId>> probePrimary(net::Address addr) {
-    ProbeContext probeContext;
-    Conn conn;
-    conn.addrs.push_back(addr);
-    co_return co_await probePrimary(probeContext, conn);
-  }
-
   void addMgmtd(flat::NodeId nodeId, std::vector<net::Address> addrs) {
-    XLOGF(INFO, "MgmtdClient: found new mgmtd {} {}", nodeId, fmt::join(addrs, ","));
-    for (auto addr : addrs) addrMap_[addr] = nodeId;
+    XLOGF(INFO, "MgmtdClient: mgmtd {} updated address {}", nodeId, fmt::join(addrs, ","));
     Conn conn;
     conn.nodeId = nodeId;
     conn.addrs = std::move(addrs);
@@ -605,10 +607,12 @@ struct MgmtdClient::Impl {
   }
 
   bool tryAddMgmtd(flat::NodeId nodeId, const std::vector<flat::ServiceGroupInfo> &serviceGroups) {
-    if (mgmtds_.contains(nodeId)) return true;
     auto addresses = flat::extractAddresses(serviceGroups, "Mgmtd", config_.network_type());
     if (addresses.empty()) return false;
-    addMgmtd(nodeId, std::move(addresses));
+
+    auto it = mgmtds_.find(nodeId);
+    if (it == mgmtds_.end() || it->second.addrs != addresses )
+      addMgmtd(nodeId, std::move(addresses));
     return true;
   }
 
@@ -770,7 +774,6 @@ struct MgmtdClient::Impl {
   folly::atomic_shared_ptr<ConfigListener> clientConfigListener_;
   std::unique_ptr<mgmtd::ExtendClientSessionReq> clientSessionReq_;
 
-  robin_hood::unordered_map<net::Address, flat::NodeId> addrMap_;
   robin_hood::unordered_map<flat::NodeId, Conn> mgmtds_;
   flat::NodeId primaryMgmtdId_{0};
 

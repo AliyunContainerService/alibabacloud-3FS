@@ -16,7 +16,7 @@ Result<Void> NamedAddress::resolve(It out) const {
   struct addrinfo *res;
   int err = getaddrinfo(node.c_str(), service.c_str(), &req, &res);
   if (err != 0) {
-    return MAKE_ERROR_F(StatusCode::kInvalidFormat, "failed to resolve {}:{}: {}", node, service, gai_strerror(err));
+    return MAKE_ERROR_F(StatusCode::kInvalidConfig, "failed to resolve {}:{}: {}", node, service, gai_strerror(err));
   }
   SCOPE_EXIT { freeaddrinfo(res); };
 

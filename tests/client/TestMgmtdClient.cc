@@ -1,5 +1,6 @@
 #include <folly/experimental/coro/BlockingWait.h>
 #include <folly/experimental/coro/Sleep.h>
+#include <folly/logging/xlog.h>
 
 #include "client/mgmtd/MgmtdClient.h"
 #include "fbs/mgmtd/NodeConversion.h"
@@ -62,6 +63,7 @@ struct Machine {
     auto it = std::find(endpoints.begin(), endpoints.end(), addr);
     if (it == endpoints.end()) return nullptr;
 
+    XLOGF(INFO, "Create mgmtd stub for {} at {}", selfInfo.nodeId, addr);
     auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
     stub->set_getPrimaryMgmtdFunc([this, addr](const mgmtd::GetPrimaryMgmtdReq &) -> Result<mgmtd::GetPrimaryMgmtdRsp> {
           visitRecords.emplace_back("GetPrimaryMgmtd", addr);
@@ -75,7 +77,7 @@ struct Machine {
           visitRecords.emplace_back("GetRoutingInfo", addr);
           if (primary.hasError()) return makeError(primary.error());
           if (!*primary) return makeError(MgmtdCode::kNotPrimary);
-          if (**primary != selfInfo) return makeError(MgmtdCode::kNotPrimary, fmt::format("{}", (*primary)->nodeId));
+          if (**primary != selfInfo) return makeError(MgmtdCode::kNotPrimary, fmt::format("{}", (*primary)->nodeId.toUnderType()));
           if (routingInfo.hasError()) return makeError(routingInfo.error());
           if (*routingInfo) {
             return mgmtd::GetRoutingInfoRsp::create(**routingInfo);
@@ -178,6 +180,17 @@ TEST_F(MgmtdClientTest, testWhenNoPrimary) {
 TEST_F(MgmtdClientTest, testInvalidAddress) {
   MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada), to_named(ade)});
+  MgmtdClient client("", nullptr, config);
+
+  folly::coro::blockingWait([&]() -> CoTask<void> {
+    CO_START_CLIENT(client);
+    CO_ASSERT_ERROR(co_await client.refreshRoutingInfo(false), StatusCode::kInvalidConfig);
+  }());
+}
+
+TEST_F(MgmtdClientTest, testInvalidHostname) {
+  MgmtdClient::Config config = testConfig;
+  config.set_mgmtd_server_addresses({net::NamedAddress::from("a-strange-hostname-that-cannot-exist.com:8080").value()});
   MgmtdClient client("", nullptr, config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
@@ -516,6 +529,40 @@ TEST_F(MgmtdClientTest, testRetryUnknownAddrs) {
       };
       CO_ASSERT_RECORDS_EQ(expected);
     }
+  }());
+}
+
+TEST_F(MgmtdClientTest, testAddressSwapped) {
+  Machine ma(flat::NodeId(1), {ada});
+  Machine mb(flat::NodeId(2), {adb});
+
+  MgmtdClient::Config config = testConfig;
+  config.set_mgmtd_server_addresses({to_named(ada), to_named(adb)});
+  MgmtdClient client("", std::make_unique<MachineStubFactory>(std::vector{&ma, &mb}), config);
+
+  flat::RoutingInfo ri;
+  ri.routingInfoVersion = flat::RoutingInfoVersion(2);
+  ri.nodes[ma.selfInfo.nodeId] = flat::toNode(ma.selfInfo);
+  ri.nodes[mb.selfInfo.nodeId] = flat::toNode(mb.selfInfo);
+
+  ma.primary = &ma.selfInfo;
+  ma.routingInfo = &ri;
+
+  folly::coro::blockingWait([&]() -> CoTask<void> {
+    CO_START_CLIENT(client);
+    CO_ASSERT_OK(co_await client.refreshRoutingInfo(false));
+
+    // they switched address
+    ma.selfInfo.nodeId = flat::NodeId(2);
+    mb.selfInfo.nodeId = flat::NodeId(1);
+
+    ri.routingInfoVersion = flat::RoutingInfoVersion(3);
+    ri.nodes[ma.selfInfo.nodeId] = flat::toNode(ma.selfInfo);
+    ri.nodes[mb.selfInfo.nodeId] = flat::toNode(mb.selfInfo);
+    mb.routingInfo = ma.routingInfo = &ri;
+    mb.primary = ma.primary = &mb.selfInfo;
+
+    CO_ASSERT_OK(co_await client.refreshRoutingInfo(false));
   }());
 }
 
