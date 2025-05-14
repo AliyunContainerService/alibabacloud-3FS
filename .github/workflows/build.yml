@@ -27,7 +27,7 @@ jobs:
       with:
         toolchain: 1.86.0
     - name: install fdb client
-      run: wget https://github.com/apple/foundationdb/releases/download/7.1.61/foundationdb-clients_7.1.61-1_amd64.deb && sudo dpkg -i foundationdb-clients_7.1.61-1_amd64.deb
+      run: curl -LO https://github.com/apple/foundationdb/releases/download/7.1.61/foundationdb-clients_7.1.61-1_amd64.deb && sudo dpkg -i foundationdb-clients_7.1.61-1_amd64.deb
 
     - uses: Mozilla-Actions/sccache-action@v0.0.9
     - run: ./patches/apply.sh
