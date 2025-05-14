@@ -34,6 +34,8 @@ FROM ubuntu:22.04 AS strip
 ARG TARGETARCH
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-$TARGETARCH \
     --mount=type=cache,target=/var/lib/apt,sharing=locked,id=apt-lib-$TARGETARCH \
+    sed -i 's|http://.*\.ubuntu\.com|http://mirrors.aliyun.com|g' /etc/apt/sources.list && \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update && apt-get install -y binutils file
 
 FROM scratch AS fdb-clients
