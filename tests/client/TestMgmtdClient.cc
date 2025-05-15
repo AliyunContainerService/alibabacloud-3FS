@@ -10,7 +10,12 @@ namespace hf3fs::client::tests {
 namespace {
 class MgmtdClientTest : public ::testing::Test {
  protected:
-  MgmtdClientTest() {}
+  MgmtdClient::Config testConfig;
+
+  MgmtdClientTest() {
+    testConfig.set_enable_auto_heartbeat(false);
+    testConfig.set_enable_auto_refresh(false);
+  };
 };
 
 #define CO_START_CLIENT(client) \
@@ -19,6 +24,7 @@ class MgmtdClientTest : public ::testing::Test {
 
 std::vector<std::pair<String, String>> convert(const std::vector<std::pair<String, net::Address>> &v) {
   std::vector<std::pair<String, String>> ret;
+  ret.reserve(v.size());
   for (const auto &[method, addr] : v) {
     ret.emplace_back(method, addr.toString());
   }
@@ -87,6 +93,21 @@ struct Machine {
 
 std::vector<std::pair<String, net::Address>> Machine::visitRecords;
 
+struct MachineStubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
+  std::vector<Machine *> machines;
+
+  explicit MachineStubFactory(std::vector<Machine *> &&v)
+      : machines(std::move(v)) {}
+
+  std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) override {
+    for (auto *m : machines) {
+      auto stub = m->createStub(addr);
+      if (stub) return stub;
+    }
+    return nullptr;
+  }
+};
+
 TEST_F(MgmtdClientTest, testStartStopWithWrongConfig) {
   MgmtdClient::Config config;
   config.set_auto_refresh_interval(1_ms);
@@ -119,7 +140,7 @@ TEST_F(MgmtdClientTest, testRepetitiveStartStop) {
 }
 
 TEST_F(MgmtdClientTest, testGetRoutingInfoBeforeStart) {
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   MgmtdClient client("", nullptr, config);
   auto info = client.getRoutingInfo();
   ASSERT_TRUE(!info);
@@ -138,15 +159,13 @@ net::Address adj = net::Address::from("192.168.0.4:8888").value();
 
 TEST_F(MgmtdClientTest, testWhenNoPrimary) {
   struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address) override {
       return std::make_unique<mgmtd::DummyMgmtdServiceStub>();
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada), to_named(adb), to_named(adc)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(), config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
@@ -157,7 +176,7 @@ TEST_F(MgmtdClientTest, testWhenNoPrimary) {
 }
 
 TEST_F(MgmtdClientTest, testInvalidAddress) {
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada), to_named(ade)});
   MgmtdClient client("", nullptr, config);
 
@@ -168,7 +187,7 @@ TEST_F(MgmtdClientTest, testInvalidAddress) {
 }
 
 TEST_F(MgmtdClientTest, testAddressTypeMismatch) {
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada), to_named(adf)});
   config.set_network_type(net::Address::TCP);
   MgmtdClient client("", nullptr, config);
@@ -181,7 +200,7 @@ TEST_F(MgmtdClientTest, testAddressTypeMismatch) {
 
 TEST_F(MgmtdClientTest, testWhenLastIsPrimary) {
   struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) override {
       auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
       if (addr == adc) {
         stub->set_getPrimaryMgmtdFunc([](const mgmtd::GetPrimaryMgmtdReq &) {
@@ -194,10 +213,8 @@ TEST_F(MgmtdClientTest, testWhenLastIsPrimary) {
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada), to_named(adb), to_named(adc)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(), config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
@@ -211,7 +228,7 @@ TEST_F(MgmtdClientTest, testWhenLastIsPrimary) {
 
 TEST_F(MgmtdClientTest, testWhenPrimaryNotInConfig) {
   struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) override {
       auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
       if (addr == adc) {
         stub->set_getPrimaryMgmtdFunc([](const mgmtd::GetPrimaryMgmtdReq &) {
@@ -228,10 +245,8 @@ TEST_F(MgmtdClientTest, testWhenPrimaryNotInConfig) {
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada), to_named(adb), to_named(adc)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(), config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
@@ -251,7 +266,7 @@ TEST_F(MgmtdClientTest, testWhenGetPrimaryLoop) {
     explicit StubFactory(std::vector<net::Address> v)
         : addresses(std::move(v)) {}
 
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) override {
       auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
       for (size_t i = 0; i < addresses.size(); ++i) {
         if (addr == addresses[i]) {
@@ -271,10 +286,8 @@ TEST_F(MgmtdClientTest, testWhenGetPrimaryLoop) {
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses(to_named(addresses));
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(addresses), config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
@@ -290,7 +303,7 @@ TEST_F(MgmtdClientTest, testRetryOnRefreshFail) {
     int counta = 0;
     int countb = 0;
 
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) override {
       auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
       if (addr == ada) {
         stub->set_getPrimaryMgmtdFunc([this](const mgmtd::GetPrimaryMgmtdReq &) -> Result<mgmtd::GetPrimaryMgmtdRsp> {
@@ -320,10 +333,8 @@ TEST_F(MgmtdClientTest, testRetryOnRefreshFail) {
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses(to_named(addresses));
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(), config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
@@ -341,7 +352,7 @@ TEST_F(MgmtdClientTest, testRetryOnRefreshFail) {
 TEST_F(MgmtdClientTest, testRefreshRoutingInfoCallback) {
   std::vector<net::Address> addresses = {ada};
   struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address) override {
       auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
       stub->set_getPrimaryMgmtdFunc([](const mgmtd::GetPrimaryMgmtdReq &) {
             return mgmtd::GetPrimaryMgmtdRsp::create(makePrimary(flat::NodeId(1), ada));
@@ -355,10 +366,8 @@ TEST_F(MgmtdClientTest, testRefreshRoutingInfoCallback) {
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses(to_named(addresses));
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(), config);
 
   std::vector<std::shared_ptr<RoutingInfo>> ris;
@@ -384,27 +393,10 @@ TEST_F(MgmtdClientTest, testRetryAllAvailableAddresses) {
   Machine mb(flat::NodeId(2), {add, adf});
   Machine mc(flat::NodeId(3), {adj});
 
-  struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::vector<Machine *> machines;
-
-    explicit StubFactory(std::vector<Machine *> v)
-        : machines(std::move(v)) {}
-
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
-      for (auto *m : machines) {
-        auto stub = m->createStub(addr);
-        if (stub) return stub;
-      }
-      return nullptr;
-    }
-  };
-
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(adj)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   config.set_network_type(net::Address::TCP);
-  MgmtdClient client("", std::make_unique<StubFactory>(std::vector{&ma, &mb, &mc}), config);
+  MgmtdClient client("", std::make_unique<MachineStubFactory>(std::vector{&ma, &mb, &mc}), config);
 
   flat::RoutingInfo ri;
   ri.routingInfoVersion = flat::RoutingInfoVersion(2);
@@ -446,27 +438,10 @@ TEST_F(MgmtdClientTest, testRetryEndWhenNoPrimary) {
   Machine mb(flat::NodeId(2), {add, adf});
   Machine mc(flat::NodeId(3), {adj});
 
-  struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::vector<Machine *> machines;
-
-    explicit StubFactory(std::vector<Machine *> v)
-        : machines(std::move(v)) {}
-
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
-      for (auto *m : machines) {
-        auto stub = m->createStub(addr);
-        if (stub) return stub;
-      }
-      return nullptr;
-    }
-  };
-
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(adj)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   config.set_network_type(net::Address::TCP);
-  MgmtdClient client("", std::make_unique<StubFactory>(std::vector{&ma, &mb, &mc}), config);
+  MgmtdClient client("", std::make_unique<MachineStubFactory>(std::vector{&ma, &mb, &mc}), config);
 
   flat::RoutingInfo ri;
   ri.routingInfoVersion = flat::RoutingInfoVersion(2);
@@ -506,27 +481,10 @@ TEST_F(MgmtdClientTest, testRetryUnknownAddrs) {
   Machine mb(flat::NodeId(2), {add, adf});
   Machine mc(flat::NodeId(3), {adj});
 
-  struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
-    std::vector<Machine *> machines;
-
-    explicit StubFactory(std::vector<Machine *> v)
-        : machines(std::move(v)) {}
-
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address addr) {
-      for (auto *m : machines) {
-        auto stub = m->createStub(addr);
-        if (stub) return stub;
-      }
-      return nullptr;
-    }
-  };
-
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(adj), to_named(add)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   config.set_network_type(net::Address::TCP);
-  MgmtdClient client("", std::make_unique<StubFactory>(std::vector{&ma, &mb, &mc}), config);
+  MgmtdClient client("", std::make_unique<MachineStubFactory>(std::vector{&ma, &mb, &mc}), config);
 
   flat::RoutingInfo ri;
   ri.routingInfoVersion = flat::RoutingInfoVersion(2);
@@ -564,7 +522,7 @@ TEST_F(MgmtdClientTest, testRetryUnknownAddrs) {
 TEST_F(MgmtdClientTest, testSetGetConfigViaInvoke) {
   struct StubFactory : public stubs::IStubFactory<mgmtd::IMgmtdServiceStub> {
     std::map<flat::NodeType, flat::ConfigInfo> configs;
-    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address) {
+    std::unique_ptr<mgmtd::IMgmtdServiceStub> create(net::Address) override {
       auto stub = std::make_unique<mgmtd::DummyMgmtdServiceStub>();
       stub->set_setConfigFunc([this](const mgmtd::SetConfigReq &req) -> Result<mgmtd::SetConfigRsp> {
             auto &info = configs[req.nodeType];
@@ -583,10 +541,8 @@ TEST_F(MgmtdClientTest, testSetGetConfigViaInvoke) {
     }
   };
 
-  MgmtdClient::Config config;
+  MgmtdClient::Config config = testConfig;
   config.set_mgmtd_server_addresses({to_named(ada)});
-  config.set_enable_auto_refresh(false);
-  config.set_enable_auto_heartbeat(false);
   MgmtdClient client("", std::make_unique<StubFactory>(), config);
 
   folly::coro::blockingWait([&]() -> CoTask<void> {
