@@ -7,7 +7,13 @@ permissions:
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'deploy/container/chart/**'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'deploy/container/chart/**'
+      - '**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
