@@ -56,6 +56,10 @@ spec:
   - name: fuse
     image: registry-vpc.cn-beijing.aliyuncs.com/huweiwen-test/3fs-fuse:dev
     imagePullPolicy: Always
+    lifecycle:
+      preStop:
+        exec:
+          command: [umount, /mnt/3fs]
     args:
     - --cfg=/etc/fuse/fuse_main.toml
     - --launcher_config.mgmtd_client.mgmtd_server_addresses=["RDMA://mgmtd-{{ .Release.Name }}:8000"]
